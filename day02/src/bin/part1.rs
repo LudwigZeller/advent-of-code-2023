@@ -11,12 +11,10 @@ struct Bag {
 }
 
 fn parse(line: &str) -> Bag {
-    println!("{line:?}");
     let id = line[5..line.find(':').unwrap()].parse().unwrap();
     let line = &line[line.find(':').unwrap() + 1..];
     let cubes = line
         .split(';')
-        .inspect(|x| println!("{x:?}"))
         .map(|game| {
             game.split(',')
                 .map(|draw| {
@@ -30,7 +28,6 @@ fn parse(line: &str) -> Bag {
                     }
                 })
                 .reduce(|(r1, g1, b1), (r2, g2, b2)| (r1 + r2, g1 + g2, b1 + b2))
-                .inspect(|x| println!("{x:?}"))
                 .unwrap()
         })
         .collect::<Vec<(_, _, _)>>();
@@ -46,14 +43,13 @@ fn process(data: &str) -> u32 {
                 && bag.cubes.iter().map(|g| g.1).max().unwrap_or(0u32) <= 13
                 && bag.cubes.iter().map(|b| b.2).max().unwrap_or(0u32) <= 14
         })
-        .inspect(|x| println!("{x:?}"))
         .map(|bag| bag.id)
         .sum()
 }
 
 mod tests {
     #[test]
-    fn test() {
+    fn part1() {
         assert_eq!(
             super::process(
                 "Game 1: 3 blue, 4 red; 1 red, 2 green, 6 blue; 2 green

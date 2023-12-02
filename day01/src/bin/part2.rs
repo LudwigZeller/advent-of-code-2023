@@ -54,7 +54,7 @@ fn process(data: &str) -> u32 {
 
 mod tests {
     #[test]
-    fn test() {
+    fn part2() {
         assert_eq!(
             super::process(
                 "two1nine
