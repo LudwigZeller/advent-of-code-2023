@@ -6,6 +6,7 @@ use nom::{
     sequence::{delimited, pair, separated_pair, terminated},
     IResult,
 };
+use rayon::prelude::*;
 
 fn main() {
     let data = include_str!("data");
@@ -59,15 +60,22 @@ fn parse_translator(data: &str) -> IResult<&str, Translator> {
     )(data)
 }
 
-fn parse_seed(data: &str) -> IResult<&str, Vec<usize>> {
+fn parse_seed(data: &str) -> IResult<&str, Vec<(usize, usize)>> {
     delimited(
         tag("seeds: "),
-        separated_list1(space1, map_res(digit1, |s: &str| s.parse())),
+        separated_list1(
+            space1,
+            separated_pair(
+                map_res(digit1, |s: &str| s.parse()),
+                space1,
+                map_res(digit1, |s: &str| s.parse()),
+            ),
+        ),
         pair(newline, newline),
     )(data)
 }
 
-fn parse(data: &str) -> (Vec<usize>, Vec<Translator>) {
+fn parse(data: &str) -> (Vec<(usize, usize)>, Vec<Translator>) {
     all_consuming(pair(parse_seed, many1(parse_translator)))(data)
         .unwrap()
         .1
@@ -76,15 +84,12 @@ fn parse(data: &str) -> (Vec<usize>, Vec<Translator>) {
 fn process(data: &str) -> usize {
     let (input, translators) = parse(data);
     input
-        .into_iter()
+        .into_par_iter()
+        .flat_map(|(bot, top)| bot..bot + top)
         .map(|num| {
-            println!("----------");
-            translators.iter().fold(num, |num, trans| {
-                println!("{} -> {}", trans.id.0, trans.id.1);
-                let a = trans.translate(num);
-                println!("{num} -> {a}");
-                a
-            })
+            translators
+                .iter()
+                .fold(num, |num, trans| trans.translate(num))
         })
         .min()
         .unwrap()
@@ -92,7 +97,7 @@ fn process(data: &str) -> usize {
 
 mod tests {
     #[test]
-    fn part1() {
+    fn part2() {
         assert_eq!(
             super::process(
                 "seeds: 79 14 55 13
@@ -129,7 +134,7 @@ humidity-to-location map:
 60 56 37
 56 93 4"
             ),
-            35
+            46
         )
     }
 }
