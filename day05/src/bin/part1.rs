@@ -1,7 +1,9 @@
 use nom::{
-    bytes::complete::{tag, take_until1},
-    multi::many0,
-    sequence::terminated,
+    bytes::complete::{is_not, tag},
+    character::complete::{alpha0, digit1, multispace1, newline, space1},
+    combinator::{all_consuming, map, map_res, opt},
+    multi::{many1, separated_list1},
+    sequence::{delimited, pair, separated_pair, terminated},
     IResult,
 };
 
@@ -11,27 +13,55 @@ fn main() {
     dbg!(result);
 }
 
+#[derive(Debug)]
 struct Translator<'a> {
     id: (&'a str, &'a str),
-    input: Vec<(usize, usize)>,
+    trans: Vec<Vec<usize>>,
 }
 
-impl<'a> From<&'a str> for Translator<'a> {
-    fn from(value: &'a str) -> Self {
+impl<'a> Translator<'a> {
+    fn translate(from: usize) -> usize {
         todo!()
     }
 }
 
-fn parse_multiline_block(data: &str) -> IResult<&str, &str> {
-    terminated(take_until1("\n\n"), tag("\n\n"))(data)
+fn parse_translator_id(data: &str) -> IResult<&str, (&str, &str)> {
+    terminated(separated_pair(alpha0, tag("-to-"), is_not(":")), tag(":\n"))(data)
 }
 
-fn parse_all_multiline_blocks(data: &str) -> IResult<&str, Vec<&str>> {
-    many0(parse_multiline_block)(data)
+fn parse_translator_values(data: &str) -> IResult<&str, Vec<usize>> {
+    terminated(
+        separated_list1(space1, map_res(digit1, |s: &str| s.parse::<usize>())),
+        opt(newline),
+    )(data)
+}
+
+fn parse_translator(data: &str) -> IResult<&str, Translator> {
+    map(
+        terminated(
+            pair(parse_translator_id, many1(parse_translator_values)),
+            opt(newline),
+        ),
+        |(id, trans)| Translator { id, trans },
+    )(data)
+}
+
+fn parse_seed(data: &str) -> IResult<&str, Vec<usize>> {
+    delimited(
+        tag("seeds: "),
+        separated_list1(space1, map_res(digit1, |s: &str| s.parse())),
+        pair(newline, newline),
+    )(data)
+}
+
+fn parse(data: &str) -> (Vec<usize>, Vec<Translator>) {
+    all_consuming(pair(parse_seed, many1(parse_translator)))(data)
+        .unwrap()
+        .1
 }
 
 fn process(data: &str) -> usize {
-    dbg!(parse_all_multiline_blocks(data).unwrap().1);
+    dbg!(parse(data));
     todo!()
 }
 
