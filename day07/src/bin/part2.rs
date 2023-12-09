@@ -8,6 +8,8 @@ use nom::{
     IResult,
 };
 
+use rayon::prelude::*;
+
 fn main() {
     let data = include_str!("data");
     let result = process(data);
@@ -15,58 +17,74 @@ fn main() {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug, Hash)]
-enum Kind {
-    A,
-    K,
-    Q,
+enum Card {
     J,
-    T,
-    N9,
-    N8,
-    N7,
-    N6,
-    N5,
-    N4,
-    N3,
     N2,
+    N3,
+    N4,
+    N5,
+    N6,
+    N7,
+    N8,
+    N9,
+    T,
+    Q,
+    K,
+    A,
 }
 
-impl From<char> for Kind {
+impl From<char> for Card {
     fn from(value: char) -> Self {
         match value {
-            'A' => Kind::A,
-            'K' => Kind::K,
-            'Q' => Kind::Q,
-            'J' => Kind::J,
-            'T' => Kind::T,
-            '9' => Kind::N9,
-            '8' => Kind::N8,
-            '7' => Kind::N7,
-            '6' => Kind::N6,
-            '5' => Kind::N5,
-            '4' => Kind::N4,
-            '3' => Kind::N3,
-            '2' => Kind::N2,
-            s => panic!("Not a Kind: {s}"),
+            'A' => Card::A,
+            'K' => Card::K,
+            'Q' => Card::Q,
+            'J' => Card::J,
+            'T' => Card::T,
+            '9' => Card::N9,
+            '8' => Card::N8,
+            '7' => Card::N7,
+            '6' => Card::N6,
+            '5' => Card::N5,
+            '4' => Card::N4,
+            '3' => Card::N3,
+            '2' => Card::N2,
+            s => panic!("Not a Card: {s}"),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-struct Hand([Kind; 5]);
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+struct Hand([Card; 5]);
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum Rank {
-    FiveKind,
-    FourKind,
-    FullHouse,
-    ThreeKind,
-    TwoPair,
-    OnePair,
     HighCard,
+    OnePair,
+    TwoPair,
+    ThreeKind,
+    FullHouse,
+    FourKind,
+    FiveKind,
 }
 
 impl Hand {
+    fn generate_possible_hands(hand: &Hand) -> Vec<Hand> {
+        // FIXME: Really inefficient
+        if !hand.0.contains(&Card::J) {
+            return vec![*hand];
+        }
+        let inx = hand.0.iter().position(|c| *c == Card::J).unwrap();
+        use Card::*;
+        let mut possible_hands = Vec::new();
+        for card in [A, K, Q, T, N9, N8, N7, N6, N5, N4, N3, N2] {
+            let mut hand = *hand;
+            hand.0[inx] = card;
+            possible_hands.extend(Hand::generate_possible_hands(&hand))
+        }
+        possible_hands
+    }
+
     fn get_rank(&self) -> Rank {
         let map = self.0.iter().fold(HashMap::new(), |mut map, item| {
             map.entry(item).and_modify(|cnt| *cnt += 1).or_insert(1);
@@ -93,18 +111,32 @@ impl Hand {
 
 impl PartialOrd for Hand {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        let (rank1, rank2) = (self.get_rank(), other.get_rank());
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Hand {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let mut p_self = Hand::generate_possible_hands(self);
+        p_self.sort();
+        let mut p_other = Hand::generate_possible_hands(other);
+        p_other.sort();
+
+        let (rank1, rank2) = (
+            p_self.last().unwrap().get_rank(),
+            p_other.last().unwrap().get_rank(),
+        );
         if rank1 == rank2 {
             for (card1, card2) in zip(self.0.iter(), other.0.iter()) {
                 if card1 != card2 {
-                    return Some(card1.cmp(card2));
+                    return card1.cmp(card2);
                 }
             }
-            return Some(Ordering::Equal);
+            return Ordering::Equal;
         }
         match rank1 > rank2 {
-            true => Some(Ordering::Greater),
-            false => Some(Ordering::Less),
+            true => Ordering::Greater,
+            false => Ordering::Less,
         }
     }
 }
@@ -114,7 +146,7 @@ fn parse_line(data: &str) -> IResult<&str, (Hand, usize)> {
         separated_pair(
             map(alphanumeric1, |s: &str| {
                 assert_eq!(s.len(), 5);
-                let mut hand = [Kind::A; 5];
+                let mut hand = [Card::A; 5];
                 s.chars()
                     .map(|c| c.into())
                     .enumerate()
@@ -134,7 +166,7 @@ fn parse(data: &str) -> Vec<(Hand, usize)> {
 
 fn process(data: &str) -> usize {
     let mut game = parse(data);
-    game.sort_by(|(a, _), (b, _)| b.partial_cmp(a).unwrap());
+    game.par_sort();
     game.iter()
         .enumerate()
         .inspect(|(rank, (hand, bid))| {
@@ -146,7 +178,7 @@ fn process(data: &str) -> usize {
 
 mod tests {
     #[test]
-    fn part1() {
+    fn part2() {
         assert_eq!(
             super::process(
                 "32T3K 765
@@ -155,7 +187,34 @@ KK677 28
 KTJJT 220
 QQQJA 483"
             ),
-            6440
+            5905
+        )
+    }
+    #[test]
+    fn part2_custom() {
+        assert_eq!(
+            super::process(
+                "2345A 1
+Q2KJJ 13
+Q2Q2Q 19
+T3T3J 17
+T3Q33 11
+2345J 3
+J345A 2
+32T3K 5
+T55J5 29
+KK677 7
+KTJJT 34
+QQQJA 31
+JJJJJ 37
+JAAAA 43
+AAAAJ 59
+AAAAA 61
+2AAAA 23
+2JJJJ 53
+JJJJ2 41"
+            ),
+            6839
         )
     }
 }
